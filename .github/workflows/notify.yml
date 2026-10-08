@@ -1,0 +1,28 @@
+name: youtube-notify
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency: youtube-notify
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: python3 check.py
+        env:
+          WEBHOOK_TIPP7: ${{ secrets.WEBHOOK_TIPP7 }}
+          WEBHOOK_JYOBU: ${{ secrets.WEBHOOK_JYOBU }}
+      - name: 알림 보낸 영상 목록 저장
+        if: always()
+        run: |
+          git add seen.json
+          git diff --cached --quiet && exit 0
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "seen 갱신"
+          git push
