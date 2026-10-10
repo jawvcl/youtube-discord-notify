@@ -25,16 +25,17 @@ def fetch(url, payload=None):
         data = json.dumps(payload).encode()
         headers["Content-Type"] = "application/json"
     req = urllib.request.Request(url, data=data, headers=headers)
-    # YouTube 피드는 간헐적으로 404/500을 낸다 -> GET만 재시도 (POST 재시도는 중복 알림 위험)
-    waits = [3, 6, 12] if payload is None else []
-    while True:
+    # YouTube 피드는 요청마다 무작위로 404/500을 낸다 (2026-10-10 GitHub 러너에서 약 65% 실패)
+    # -> GET만 재시도한다. POST 재시도는 중복 알림 위험이 있다.
+    tries = 12 if payload is None else 1
+    for left in reversed(range(tries)):
         try:
             with urllib.request.urlopen(req, timeout=20) as r:
                 return r.read().decode("utf-8", "replace")
         except OSError:  # HTTPError, URLError, 타임아웃 모두 포함
-            if not waits:
+            if not left:
                 raise
-            time.sleep(waits.pop(0))
+            time.sleep(3)
 
 
 def parse_feed(xml):
