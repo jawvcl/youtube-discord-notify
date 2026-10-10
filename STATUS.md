@@ -22,13 +22,14 @@
 - 팁7 채널 ID `UCJMW5nKtT9uSHWINC-aAUPw` → Secret `WEBHOOK_TIPP7`
 - 죠브 채널 ID `UCEnjAAmVQ9wx8CDPDV6Y4sg` → Secret `WEBHOOK_JYOBU`
 - `seen.json`은 Actions가 자동 커밋한다. 로컬에서 푸시하기 전에 `git pull --rebase` 필요.
-- YouTube 피드는 요청마다 무작위로 404/500을 내고 30초 넘게 연속 실패하기도 한다 (2026-10-10 GitHub 러너 실측 약 65% 실패, 로컬 약 10%) → `fetch_feed`가 채널 피드와 업로드 재생목록 피드를 번갈아 최대 3분간 시도한다.
-- 게시된 지 7일 넘은 영상은 알리지 않는다 (`MAX_AGE`).
+- YouTube RSS 피드는 GitHub 러너에서 몇 분씩 통째로 404/500이 난다 (2026-10-10 실측: 러너 6대 중 2대가 4분 내내 실패, 재시도로 해결 안 됨). 업로드 재생목록 페이지(`playlist?list=UU…`)는 같은 실측에서 24/24 성공 → 이것이 주 소스이고, RSS는 페이지를 못 읽을 때만 쓰는 예비다.
+- 재생목록 상위 15개는 RSS 피드와 ID·제목·순서가 동일함을 확인했다 (2026-10-10).
+- 새 영상 = 목록 맨 위부터 이미 알린 영상이 나오기 전까지. 한 번에 최대 5개.
 - 예약 방송은 "방송 예정"으로 예약 시점에 한 번만 알린다(시작 시점 재알림 없음).
 
 ## FILE MAP
-- `check.py` — 피드 확인 + Discord 전송
-- `test_check.py` — 피드 파싱 자체 점검 (`python3 test_check.py`)
+- `check.py` — 새 영상 확인 + Discord 전송
+- `test_check.py` — 자체 점검 (`python3 test_check.py`)
 - `seen.json` — 이미 알린 영상 ID
 - `.github/workflows/notify.yml` — 5분 주기 실행
 
