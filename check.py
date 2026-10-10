@@ -2,6 +2,7 @@
 import json
 import os
 import sys
+import time
 import urllib.request
 import xml.etree.ElementTree as ET
 
@@ -24,8 +25,16 @@ def fetch(url, payload=None):
         data = json.dumps(payload).encode()
         headers["Content-Type"] = "application/json"
     req = urllib.request.Request(url, data=data, headers=headers)
-    with urllib.request.urlopen(req, timeout=20) as r:
-        return r.read().decode("utf-8", "replace")
+    # YouTube 피드는 간헐적으로 404/500을 낸다 -> GET만 재시도 (POST 재시도는 중복 알림 위험)
+    waits = [3, 6, 12] if payload is None else []
+    while True:
+        try:
+            with urllib.request.urlopen(req, timeout=20) as r:
+                return r.read().decode("utf-8", "replace")
+        except OSError:  # HTTPError, URLError, 타임아웃 모두 포함
+            if not waits:
+                raise
+            time.sleep(waits.pop(0))
 
 
 def parse_feed(xml):
