@@ -22,7 +22,8 @@
 - 팁7 채널 ID `UCJMW5nKtT9uSHWINC-aAUPw` → Secret `WEBHOOK_TIPP7`
 - 죠브 채널 ID `UCEnjAAmVQ9wx8CDPDV6Y4sg` → Secret `WEBHOOK_JYOBU`
 - `seen.json`은 Actions가 자동 커밋한다. 로컬에서 푸시하기 전에 `git pull --rebase` 필요.
-- YouTube 피드는 요청마다 무작위로 404/500을 낸다 (2026-10-10 GitHub 러너 실측 약 65% 실패, 로컬 약 10%) → `fetch`가 GET을 최대 12회 시도한다.
+- YouTube 피드는 요청마다 무작위로 404/500을 내고 30초 넘게 연속 실패하기도 한다 (2026-10-10 GitHub 러너 실측 약 65% 실패, 로컬 약 10%) → `fetch_feed`가 채널 피드와 업로드 재생목록 피드를 번갈아 최대 3분간 시도한다.
+- 게시된 지 7일 넘은 영상은 알리지 않는다 (`MAX_AGE`).
 - 예약 방송은 "방송 예정"으로 예약 시점에 한 번만 알린다(시작 시점 재알림 없음).
 
 ## FILE MAP

@@ -5,6 +5,7 @@ import sys
 import time
 import urllib.request
 import xml.etree.ElementTree as ET
+from datetime import datetime, timedelta, timezone
 
 # 채널 ID: 웹후크 URL이 담긴 환경변수(GitHub Secret) 이름
 CHANNELS = {
@@ -12,7 +13,8 @@ CHANNELS = {
     "UCEnjAAmVQ9wx8CDPDV6Y4sg": "WEBHOOK_JYOBU",  # 죠브
 }
 SEEN_FILE = "seen.json"
-FEED = "https://www.youtube.com/feeds/videos.xml?channel_id="
+FEED = "https://www.youtube.com/feeds/videos.xml?"
+MAX_AGE = timedelta(days=7)
 WATCH = "https://www.youtube.com/watch?v="
 NS = {"a": "http://www.w3.org/2005/Atom", "yt": "http://www.youtube.com/xml/schemas/2015"}
 
@@ -25,27 +27,36 @@ def fetch(url, payload=None):
         data = json.dumps(payload).encode()
         headers["Content-Type"] = "application/json"
     req = urllib.request.Request(url, data=data, headers=headers)
-    # YouTube 피드는 요청마다 무작위로 404/500을 낸다 (2026-10-10 GitHub 러너에서 약 65% 실패)
-    # -> GET만 재시도한다. POST 재시도는 중복 알림 위험이 있다.
-    tries = 12 if payload is None else 1
-    for left in reversed(range(tries)):
-        try:
-            with urllib.request.urlopen(req, timeout=20) as r:
-                return r.read().decode("utf-8", "replace")
-        except OSError:  # HTTPError, URLError, 타임아웃 모두 포함
-            if not left:
-                raise
-            time.sleep(3)
+    with urllib.request.urlopen(req, timeout=20) as r:
+        return r.read().decode("utf-8", "replace")
 
 
 def parse_feed(xml):
-    """피드 XML -> (채널명, [(video_id, 제목)]) — 오래된 것부터."""
+    """피드 XML -> (채널명, [(video_id, 제목, 게시 시각)]) — 오래된 것부터."""
     root = ET.fromstring(xml)
     entries = [
-        (e.findtext("yt:videoId", "", NS), e.findtext("a:title", "", NS))
+        (
+            e.findtext("yt:videoId", "", NS),
+            e.findtext("a:title", "", NS),
+            datetime.fromisoformat(e.findtext("a:published", "", NS)),
+        )
         for e in root.findall("a:entry", NS)
     ]
-    return root.findtext("a:title", "", NS), entries[::-1]
+    return root.findtext("a:author/a:name", "", NS), entries[::-1]
+
+
+def fetch_feed(cid):
+    # YouTube 피드는 요청마다 무작위로 404/500을 내고, 실패가 30초 넘게 이어지기도 한다
+    # (2026-10-10 GitHub 러너 실측: 약 65% 실패, 12회 연속 실패). 채널 피드와 업로드
+    # 재생목록 피드(UC -> UU, 내용 동일)는 따로 실패하므로 번갈아 최대 3분간 시도한다.
+    urls = [FEED + "channel_id=" + cid, FEED + "playlist_id=UU" + cid[2:]]
+    for left in reversed(range(30)):
+        try:
+            return parse_feed(fetch(urls[left % 2]))
+        except (OSError, ValueError):  # HTTP 오류/타임아웃, 깨진 XML
+            if not left:
+                raise
+            time.sleep(6)
 
 
 def label(video_id):
@@ -70,12 +81,13 @@ def main():
     failed = False
     for cid, env in CHANNELS.items():
         try:
-            author, entries = parse_feed(fetch(FEED + cid))
+            author, entries = fetch_feed(cid)
             if cid not in seen:
                 # 첫 실행: 과거 영상은 건너뛰고 최신 1개만 알려서 동작을 확인한다
-                seen[cid] = [vid for vid, _ in entries[:-1]]
-            for vid, title in entries:
-                if vid in seen[cid]:
+                seen[cid] = [vid for vid, _, _ in entries[:-1]]
+            for vid, title, published in entries:
+                # 오래된 영상은 새 영상이 아니다 (최근 영상이 삭제되면 옛 영상이 피드에 다시 들어온다)
+                if vid in seen[cid] or datetime.now(timezone.utc) - published > MAX_AGE:
                     continue
                 fetch(os.environ[env], {
                     "content": f"{label(vid)} | **{author}**\n{title}\n{WATCH}{vid}",
